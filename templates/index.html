@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GlyphNexus Suggestions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1C1C1E;
+            color: white;
+        }
+        .form-container {
+            background: #2C2C2F;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 6px;
+            background: #363639;
+            color: white;
+            font-size: 16px;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #suggestions {
+            background: #2C2C2F;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .suggestion-item {
+            margin: 12px 0;
+            padding: 15px;
+            background: #363639;
+            border-radius: 6px;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 16px;
+            color: #007AFF;
+        }
+        h2, h3 {
+            margin-top: 0;
+            color: #007AFF;
+        }
+        #error-message {
+            color: red;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2>GlyphNexus Suggestions Generator</h2>
+        <input type="text" id="appName" placeholder="Enter app name (e.g., Discord, WhatsApp)">
+        <button onclick="getSuggestions()">Generate Suggestions</button>
+    </div>
+    <div id="suggestions"></div>
+    <div id="error-message"></div>
+
+    <script>
+        // Get or create a unique user ID and store it in localStorage
+        function getOrCreateUserId() {
+            let userId = localStorage.getItem('userId');
+            if (!userId) {
+                // Generates a simple, unique ID
+                userId = 'user_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('userId', userId);
+            }
+            return userId;
+        }
+
+        function getSuggestions() {
+            const appName = document.getElementById('appName').value;
+            const suggestionsDiv = document.getElementById('suggestions');
+            const errorMessageDiv = document.getElementById('error-message');
+            
+            // Clear previous results and errors
+            suggestionsDiv.innerHTML = '<div class="loading">Generating suggestions...</div>';
+            errorMessageDiv.textContent = '';
+            
+            if (!appName) {
+                suggestionsDiv.innerHTML = '';
+                errorMessageDiv.textContent = 'Please enter an app name.';
+                return;
+            }
+            
+            const userId = getOrCreateUserId();
+
+            fetch('http://127.0.0.1:5000/get_suggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    app_name: appName,
+                    user_id: userId
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Handle non-200 status codes
+                    return response.json().then(errorData => {
+                        suggestionsDiv.innerHTML = '';
+                        errorMessageDiv.textContent = errorData.message || 'An unexpected error occurred.';
+                        throw new Error(errorData.message);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.suggestions && data.suggestions.length > 0) {
+                    suggestionsDiv.innerHTML = `
+                        <h3>Glyph Pattern Suggestions</h3>
+                        ${data.suggestions.map(suggestion => 
+                            `<div class="suggestion-item">${suggestion}</div>`
+                        ).join('')}
+                    `;
+                } else {
+                    suggestionsDiv.innerHTML = '<p>No suggestions found</p>';
+                }
+            })
+            .catch(error => {
+                // This catch block handles network errors and errors from the .then block
+                console.error('Error:', error);
+                if (!errorMessageDiv.textContent) {
+                    errorMessageDiv.textContent = 'Error generating suggestions. Please check the console for details.';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+flask
+logging
+gunicorn
+flask_cors
+google-generativeai
