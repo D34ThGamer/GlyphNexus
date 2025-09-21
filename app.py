@@ -6,6 +6,7 @@ from flask_cors import CORS
 from google.generativeai.types import GenerationConfig
 import sqlite3
 from datetime import datetime
+import os
 
 # Configure basic logging
 logging.basicConfig(
@@ -17,16 +18,13 @@ logging.basicConfig(
 flask_app = Flask(__name__)
 CORS(flask_app)
 
-# ----------------- Gemini API Configuration -----------------
-# WARNING: Storing API keys directly in code is a security risk.
-# This should be loaded from a secure environment variable.
-gemini_api_key = "AIzaSyBAvodm4p6YnQFsYcBdCqJVsmGw1d7kyPs"
+gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not gemini_api_key:
-    logging.error("GOOGLE_API_KEY environment variable not set.")
+    # A more robust check might be needed for production
+    logging.error("GEMINI_API_KEY environment variable not set.")
     # For a production app, you would raise an error here.
-    # We will assume the key is present for this example.
-    pass
+    raise ValueError("GEMINI_API_KEY environment variable not set.")
 
 genai.configure(api_key=gemini_api_key)
 
