@@ -110,7 +110,7 @@
             
             const userId = getOrCreateUserId();
 
-            fetch('http://127.0.0.1:5000/get_suggestions', {
+            fetch('/get_suggestions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
