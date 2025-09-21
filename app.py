@@ -206,6 +206,7 @@ def get_suggestions():
         logging.error(f"Error in /get_suggestions endpoint: {e}")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     flask_app.run(debug=True, host='0.0.0.0', port=5000)
