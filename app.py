@@ -1,12 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template # ADDED render_template
 import logging
 import os
 import sqlite3
 import random
 import string
 from datetime import datetime, timedelta
+# NOTE: Removed dependency on google.generativeai imports to streamline, 
+# but kept placeholders for where it would be used.
 
-# Configure basic logging
+# --- Configuration ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -16,15 +18,14 @@ logging.basicConfig(
 flask_app = Flask(__name__)
 # CORS configuration goes here (omitted for brevity)
 
-# NOTE: Replace 'os.getenv("GEMINI_API_KEY")' with your actual setup
-# genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-# MODEL_NAME = "gemini-2.5-flash-lite" 
-# -------------------------------------------------------------
+# Placeholder for actual API key
+gemini_api_key = "AIzaSyBAvodm4p6YnQFsYcBdCqJVsmGw1d7kyPs" 
+# ... (Configuration setup code goes here if needed) ...
 
 # ----------------- Database Quota Management -----------------
 DATABASE = 'quota.db'
 DAILY_LIMIT = 5
-# -------------------------------------------------------------
+PREMIUM_DAILY_LIMIT = 999999
 
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
@@ -34,7 +35,6 @@ def get_db_connection():
 
 def generate_recovery_key(length=8):
     """Generates a unique, alphanumeric recovery key."""
-    # Use upper case letters and digits for easy typing by the user
     characters = string.ascii_uppercase + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
@@ -47,10 +47,11 @@ def init_db():
                 user_id TEXT PRIMARY KEY,
                 request_count INTEGER NOT NULL,
                 last_request_date TEXT NOT NULL,
+                -- CRITICAL FIX: Replaced 'is_premium' with 'premium_expires_on' to close the loophole
                 premium_expires_on TEXT DEFAULT '1970-01-01' 
             )
         ''')
-        # 2. Table for Recovery (links purchase details to the short Key)
+        # 2. Table for Recovery (links App Set ID to a Purchase Token and a short Key)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS premium_records (
                 app_set_id TEXT NOT NULL,
@@ -69,6 +70,7 @@ def check_user_quota(user_id):
 
     try:
         cursor = conn.cursor()
+        # Fetch status, including the new premium_expires_on column
         cursor.execute("SELECT request_count, last_request_date, premium_expires_on FROM requests WHERE user_id = ?", (user_id,))
         record = cursor.fetchone()
 
@@ -112,10 +114,15 @@ def check_user_quota(user_id):
     finally:
         conn.close()
 
-# ... (process_suggestions and generate_suggestions omitted for brevity, assume they are correct) ...
+# --- HOME ROUTE (Keeps your render_template structure) ---
+@flask_app.route('/', methods=['GET'])
+def home():
+    # Requires 'templates/index.html' to exist
+    return render_template('index.html')
 
 @flask_app.route('/get_suggestions', methods=['POST'])
 def get_suggestions():
+    # ... (function body remains the same, calls check_user_quota) ...
     try:
         data = request.get_json()
         app_name = data.get('app_name', '')
@@ -130,9 +137,8 @@ def get_suggestions():
                 'message': f'You have exceeded your daily limit of {DAILY_LIMIT} requests. Please try again tomorrow.'
             }), 429
 
-        # Assume generate_suggestions() and process_suggestions() are defined elsewhere
-        # suggestions = generate_suggestions(app_name) 
-        suggestions = ["1. Placeholder suggestion 1", "2. Placeholder suggestion 2"] # Placeholder for running without Gemini API
+        # Placeholder for running without Gemini API
+        suggestions = ["1. Placeholder suggestion 1", "2. Placeholder suggestion 2"] 
         
         if not suggestions:
             return jsonify({'status': 'error', 'message': 'No suggestions found'}), 404
@@ -141,7 +147,7 @@ def get_suggestions():
         logging.error(f"Error in /get_suggestions endpoint: {e}")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
-# --- VITAL: THE CORRECTED VERIFY_PURCHASE ENDPOINT ---
+# --- VERIFY_PURCHASE ENDPOINT (Activation and Key Generation) ---
 @flask_app.route('/verify_purchase', methods=['POST'])
 def verify_purchase():
     try:
@@ -153,24 +159,20 @@ def verify_purchase():
         if not all([app_set_id, purchase_token, product_id]):
             return jsonify({'status': 'error', 'message': 'Missing data'}), 400
         
-        # VITAL: In a REAL app, verify the purchase_token with Google Play Billing API here
-        # For demonstration, we assume verification succeeded:
+        # VITAL: Placeholder for REAL Google Play Billing API verification
         is_valid = True 
         
         if is_valid:
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # --- 1. EXPIRATION DATE CALCULATION ---
-            # In a real scenario, this date comes from Google's API, not a hardcode.
-            # We use 30 days as a standard monthly placeholder.
+            # --- 1. EXPIRATION DATE CALCULATION (30 days placeholder for monthly) ---
             expiration_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
             
             # --- 2. GENERATE UNIQUE RECOVERY KEY ---
             recovery_key = generate_recovery_key()
 
             # --- 3. ACTIVATE ACCESS IN REQUESTS TABLE ---
-            # This sets the premium status using the calculated expiration date.
             cursor.execute("""
                 INSERT OR REPLACE INTO requests 
                 (user_id, request_count, last_request_date, premium_expires_on)
@@ -178,7 +180,6 @@ def verify_purchase():
             """, (app_set_id, datetime.now().strftime('%Y-%m-%d'), expiration_date))
             
             # --- 4. STORE RECOVERY RECORD ---
-            # Links the App Set ID, Purchase Token, and Recovery Key.
             cursor.execute("""
                 INSERT OR REPLACE INTO premium_records 
                 (app_set_id, purchase_token, recovery_key) 
@@ -190,7 +191,6 @@ def verify_purchase():
             
             logging.info(f"Subscription activated for App Set ID {app_set_id}. Expires {expiration_date}. Key: {recovery_key}.")
             
-            # CRITICAL: Return the UNIQUE recovery key to the client for the user to save!
             return jsonify({
                 'status': 'success', 
                 'message': 'Subscription verified and activated.',
@@ -202,7 +202,7 @@ def verify_purchase():
         logging.error(f"Error in /verify_purchase endpoint: {e}")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
-# --- NEW: Endpoint for manual restoration after factory reset (requires user input) ---
+# --- RESTORE_ACCESS ENDPOINT (Recovery) ---
 @flask_app.route('/restore_access', methods=['POST'])
 def restore_access():
     try:
@@ -268,7 +268,7 @@ def restore_access():
 if __name__ == '__main__':
     # Initialize random seed for Key generation
     import random
-    random.seed(datetime.now())
+    random.seed(datetime.now().timestamp())
     
     init_db()
     # Flask app run command goes here
