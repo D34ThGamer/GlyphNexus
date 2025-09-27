@@ -27,7 +27,7 @@ CORS(flask_app)
 # ----------------- Database Quota Management -----------------
 DATABASE = 'quota.db'
 DAILY_LIMIT = 5
-PREMIUM_DAILY_LIMIT = 999999 # Effectively unlimited
+PREMIUM_DAILY_LIMIT = 20
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
